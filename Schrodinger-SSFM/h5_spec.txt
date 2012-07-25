@@ -1,0 +1,37 @@
+[attrs]
+nx
+ny
+dx
+dy
+dt
+tmax
+
+(sub-domain)
+snx
+sny
+
+(source)
+sigma
+x0
+k0
+
+(barrier)
+vx0
+vx1
+vy0
+vy1
+vmax
+
+
+[ticks] (1d array)
+xticks
+yticks
+kxticks
+kyticks
+
+
+[data] (2d array)
+psi0
+kpsi0
+psi1
+kpsi1

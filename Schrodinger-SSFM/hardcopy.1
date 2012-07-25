@@ -1,0 +1,54 @@
+ 97 kappa = np.sqrt(k_shift[kidx:]**2 - k0**2)                                     |152 l1, = ax1.plot(x, np.abs(psi))
+ 98 xi = 0.5 * (kappa / k_shift[kidx:] + k_shift[kidx:] / kappa)                   |153 ax1.set_xlim(sx0*dx, sx1*dx)
+ 99 kL = kappa[:] * L                                                              |154 ax1.set_xticklabels(x)
+100 analytic_t[kidx:] = 1. / (np.cos(kL)**2 + xi**2 * np.sin(kL)**2)               |155
+101                                                                                |156 # time loop
+102 ax3.plot([k0, k0], [0, 1], linestyle='-.', color='black')                      |157 from datetime import datetime
+103 ax3.plot([k0, k_shift[-1]], [1, 1], linestyle='-.', color='black')             |158 t0 = datetime.now()
+104 l30, = ax3.plot(k_shift, analytic_t, linestyle='--', color='black', linewidth=2|159 t1 = datetime.now()
+    )                                                                              |160
+105                                                                                |161 print vc
+106 kpsi_shift0 = kpsi_shift.copy()                                                |162 print vx0, vx1
+107 l31, = ax3.plot(k_shift, (np.abs(kpsi_shift/kpsi_shift0))**2, color='blue', lin|163 plan.execute(psi_gpu)
+    ewidth=2)                                                                      |164 lcf(psi_gpu, block=(tpb,1,1), grid=(bpg,1))
+108 ax3.set_xlim(k0 - 1/sigma0*1, k0 + 1/sigma0*2)                                 |165 plan.execute(psi_gpu, inverse=True)
+109 ax3.set_ylim(0, 1.1)                                                           |166 vcf(psi_gpu, vc.real, vc.imag, block=(tpb,1,1), grid=(bpg,1))
+110 ax3.legend([l30, l31], ['Analytic', 'Numeric'], bbox_to_anchor=(1.02,1), loc=2,|167
+     borderaxespad=0.)                                                             |168 cuda.memcpy_htod(lcx_const, lcx[1:nx/2+1])
+111                                                                                |169
+112 # time loop                                                                    |170 for tstep in xrange(1, 50+1):
+113 k2 = k**2                                                                      |171     plan.execute(psi_gpu)
+114 lc = np.exp(- 0.5j * k2[:] * dt).astype(np.complex64)                          |172     lcf(psi_gpu, block=(tpb,1,1), grid=(bpg,1))
+115 lc_sqrt = np.exp(- 0.25j * k2[:] * dt).astype(np.complex64)                    |173     plan.execute(psi_gpu, inverse=True)
+116 vc = np.zeros(1, dtype=np.complex64)                                           |174     vcf(psi_gpu, vc.real, vc.imag, block=(tpb,1,1), grid=(bpg,1))
+117 vc[0] = np.exp(- 1j * vmax * dt)                                               |175
+118 print vx0, vx0+vwidth, vc                                                      |176 psi[:] = psi_gpu.get()
+119                                                                                |177 l1.set_ydata(np.abs(psi))
+120 lc_gpu = gpuarray.to_gpu(lc)                                                   |178 plt.show()
+121 lc_sqrt_gpu = gpuarray.to_gpu(lc_sqrt)                                         |179 """
+122 kernels = '''                                                                  |180
+123 __constant__ float2 vc[1];                                                     |181 for tstep in xrange(1, tmax+1):
+124                                                                                |182     plan.execute(psi_gpu)
+125 __global__ void vcf(float2 *psi) {                                             |183     lcf(psi_gpu, block=(tpb,1,1), grid=(bpg,1))
+126     int tid = blockIdx.x * blockDim.x + threadIdx.x + TID0;                    |184     plan.execute(psi_gpu, inverse=True)
+127                                                                                |185     #vcf(psi_gpu, vc.real, vc.imag, block=(tpb,1,1), grid=(bpg,1))
+128     float2 spsi = psi[tid];                                                    |186
+129                                                                                |187     if tstep%tgap == 0:
+130     if ( tid < TID_MAX ) {                                                     |188         t1 = datetime.now()
+131         psi[tid].x = vc[0].x * spsi.x - vc[0].y * spsi.y;                      |189         print "[%s] %d/%d (%d %%)\r" % (t1-t0, tstep, tmax, float(tstep)/tmax*
+132         psi[tid].y = vc[0].x * spsi.y + vc[0].y * spsi.x;                      |    100),
+133     }                                                                          |190         sys.stdout.flush()
+134 }                                                                              |191
+135 '''.replace('TID0',str(vx0)).replace('TID_MAX',str(vx0+vwidth))                |192         psi[:] = psi_gpu.get()
+136 print kernels                                                                  |193         l1.set_ydata(np.abs(psi))
+137 mod = SourceModule(kernels)                                                    |194         plt.draw()
+138 vcf = mod.get_function('vcf')                                                  |195
+139 vc_const, _ = mod.get_global('vc')                                             |196 cuda.memcpy_htod(lcx_const, lcx_sqrt[1:nx/2+1])
+140 cuda.memcpy_htod(vc_const, vc)                                                 |197 plan.execute(psi_gpu)
+141                                                                                |198 lcf(psi_gpu, block=(tpb,1,1), grid=(bpg,1))
+142 '''                                                                            |199 plan.execute(psi_gpu, inverse=True)
+143 kpsi[:] = np.fft.fft(psi)                                                      |200
+144 psi[:] = np.fft.ifft(lc_sqrt * kpsi)                                           |201 # save to the h5 file
+145 psi[vx0:vx0+vwidth] *= vc                                                      |202 f['data'].create_dataset('psi1', data=psi_gpu.get(), compression='gzip')
+026-1d-barrier-gpu.py                                            116,36         58% 028-1d-barrier-gpu-h5.py                                        170,25         95%
+"028-1d-barrier-gpu-h5.py" 209L, 5130C written
